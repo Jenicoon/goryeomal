@@ -21,7 +21,7 @@ export default function App() {
   const [savingEmbed, setSavingEmbed] = useState(false);
   const [searchingEmbed, setSearchingEmbed] = useState(false);
 
-  const API_BASE = "http://localhost:3000/api";
+  const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:3000/api";
 
   useEffect(() => {
     if (!file) {
