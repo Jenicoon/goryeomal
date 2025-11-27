@@ -3,6 +3,10 @@ import { createRoot } from "react-dom/client";
 import "./App.css";
 
 export default function App() {
+
+  console.log(process.env.REACT_APP_API_BASE)
+
+  
   const [file, setFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [ocrResult, setOcrResult] = useState(null);
