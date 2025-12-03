@@ -3,16 +3,9 @@ import { createRoot } from "react-dom/client";
 import "./App.css";
 
 export default function App() {
-<<<<<<< HEAD
-
-  console.log(process.env.REACT_APP_API_BASE)
-
-  
-=======
   // 같은 도메인의 /api 호출 (Vercel 서버리스)
   const API_BASE = ""; // 빈 값이면 fetch(`/api/...`) 사용
 
->>>>>>> deploy
   const [file, setFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [ocrResult, setOcrResult] = useState(null);
