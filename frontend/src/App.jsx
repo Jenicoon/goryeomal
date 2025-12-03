@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 import "./App.css";
 
 export default function App() {
+  // 같은 도메인의 /api 호출 (Vercel 서버리스)
+  const API_BASE = ""; // 빈 값이면 fetch(`/api/...`) 사용
+
   const [file, setFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [ocrResult, setOcrResult] = useState(null);
@@ -12,16 +15,14 @@ export default function App() {
   ]);
   const [input, setInput] = useState("");
   const [viewMode, setViewMode] = useState("ocr"); // "ocr" | "parse"
-  
-  // 저장/검색 분리
+
   const [saveText, setSaveText] = useState("");
   const [searchText, setSearchText] = useState("");
-  
   const [searchResults, setSearchResults] = useState([]);
+
   const [savingEmbed, setSavingEmbed] = useState(false);
   const [searchingEmbed, setSearchingEmbed] = useState(false);
-
-  const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:3000/api";
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (!file) {
@@ -34,30 +35,30 @@ export default function App() {
   }, [file]);
 
   async function uploadOCR() {
-    if (!file) return alert("파일을 선택하세요");
-    const fd = new FormData();
-    fd.append("document", file);
+    if (!file) return alert("파일을 선택하세요.");
     try {
-      const res = await fetch(`${API_BASE}/ocr`, { method: "POST", body: fd });
+      const fd = new FormData();
+      fd.append("document", file);
+      const res = await fetch(`${API_BASE}/api/ocr`, { method: "POST", body: fd });
       const body = await res.json();
       setOcrResult(body);
       setViewMode("ocr");
     } catch (err) {
-      alert("OCR 오류: " + err.message);
+      alert("OCR 오류: " + (err.message || err));
     }
   }
 
   async function uploadParse() {
-    if (!file) return alert("파일을 선택하세요");
-    const fd = new FormData();
-    fd.append("document", file);
+    if (!file) return alert("파일을 선택하세요.");
     try {
-      const res = await fetch(`${API_BASE}/parse`, { method: "POST", body: fd });
+      const fd = new FormData();
+      fd.append("document", file);
+      const res = await fetch(`${API_BASE}/api/parse`, { method: "POST", body: fd });
       const body = await res.json();
       setParseResult(body);
       setViewMode("parse");
     } catch (err) {
-      alert("Parse 오류: " + err.message);
+      alert("파싱 오류: " + (err.message || err));
     }
   }
 
@@ -67,9 +68,9 @@ export default function App() {
     const userMsg = { id: Date.now(), role: "user", content: text };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
-
+    setSending(true);
     try {
-      const res = await fetch(`${API_BASE}/chat`, {
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: [{ role: "user", content: text }] })
@@ -79,7 +80,10 @@ export default function App() {
       const assistantMsg = { id: Date.now() + 1, role: "assistant", content: assistantContent };
       setMessages(prev => [...prev, assistantMsg]);
     } catch (err) {
-      alert("Chat 오류: " + err.message);
+      const errMsg = { id: Date.now() + 1, role: "assistant", content: "응답 중 오류가 발생했습니다." };
+      setMessages(prev => [...prev, errMsg]);
+    } finally {
+      setSending(false);
     }
   }
 
@@ -90,24 +94,22 @@ export default function App() {
     }
   }
 
-  function messagesForView() {
-    if (viewMode === "ocr") {
-      if (!ocrResult) return [{ id: 1, role: "assistant", content: "OCR을 실행하세요." }];
-      const content = ocrResult.text || JSON.stringify(ocrResult, null, 2);
-      return [{ id: 1, role: "assistant", content }];
-    }
-    if (viewMode === "parse") {
-      if (!parseResult) return [{ id: 1, role: "assistant", content: "파싱을 실행하세요." }];
-      const content = parseResult.text || JSON.stringify(parseResult, null, 2);
-      return [{ id: 1, role: "assistant", content }];
-    }
-    return [];
-  }
-
   function getCurrentViewText() {
     if (viewMode === "ocr" && ocrResult) return ocrResult.text || JSON.stringify(ocrResult, null, 2);
     if (viewMode === "parse" && parseResult) return parseResult.text || JSON.stringify(parseResult, null, 2);
     return "";
+  }
+
+  function viewMessages() {
+    if (viewMode === "ocr") {
+      if (!ocrResult) return [{ id: "no-ocr", role: "assistant", content: "OCR을 실행하세요." }];
+      return [{ id: "ocr", role: "assistant", content: ocrResult.text || JSON.stringify(ocrResult, null, 2) }];
+    }
+    if (viewMode === "parse") {
+      if (!parseResult) return [{ id: "no-parse", role: "assistant", content: "파싱을 실행하세요." }];
+      return [{ id: "parse", role: "assistant", content: parseResult.text || JSON.stringify(parseResult, null, 2) }];
+    }
+    return [];
   }
 
   async function saveEmbedding() {
@@ -115,16 +117,16 @@ export default function App() {
     if (!text) return alert("저장할 텍스트가 없습니다.");
     setSavingEmbed(true);
     try {
-      const res = await fetch(`${API_BASE}/embeddings`, {
+      const res = await fetch(`${API_BASE}/api/embeddings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, metadata: { savedAt: new Date().toISOString() } })
       });
       const body = await res.json();
-      alert("✓ Embedding 저장 완료: " + body.id);
+      alert("Embedding 저장 완료: " + (body.id || "ok"));
       setSaveText("");
     } catch (err) {
-      alert("✗ 저장 실패: " + err.message);
+      alert("저장 실패: " + (err.message || err));
     } finally {
       setSavingEmbed(false);
     }
@@ -135,7 +137,7 @@ export default function App() {
     if (!query) return alert("검색어를 입력하세요.");
     setSearchingEmbed(true);
     try {
-      const res = await fetch(`${API_BASE}/search`, {
+      const res = await fetch(`${API_BASE}/api/search`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, topK: 5 })
@@ -143,7 +145,7 @@ export default function App() {
       const body = await res.json();
       setSearchResults(body.results || []);
     } catch (err) {
-      alert("✗ 검색 실패: " + err.message);
+      alert("검색 실패: " + (err.message || err));
     } finally {
       setSearchingEmbed(false);
     }
@@ -198,7 +200,7 @@ export default function App() {
             </div>
             <div className="result-content">
               <div className="chat-window small">
-                {messagesForView().map(m => (
+                {viewMessages().map(m => (
                   <div key={m.id} className={`msg ${m.role === "user" ? "user" : "assistant"}`}>
                     <div className="bubble">{m.content}</div>
                   </div>
