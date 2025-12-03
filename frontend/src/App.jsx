@@ -3,18 +3,15 @@ import { createRoot } from "react-dom/client";
 import "./App.css";
 
 export default function App() {
-  // 같은 도메인의 /api 호출 (Vercel 서버리스)
-  const API_BASE = ""; // 빈 값이면 fetch(`/api/...`) 사용
+  const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:3000/api";
 
   const [file, setFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
   const [ocrResult, setOcrResult] = useState(null);
   const [parseResult, setParseResult] = useState(null);
-  const [messages, setMessages] = useState([
-    { id: 1, role: "assistant", content: "안녕하세요. 무엇을 도와드릴까요?" }
-  ]);
+  const [messages, setMessages] = useState([{ id: 1, role: "assistant", content: "안녕하세요. 무엇을 도와드릴까요?" }]);
   const [input, setInput] = useState("");
-  const [viewMode, setViewMode] = useState("ocr"); // "ocr" | "parse"
+  const [viewMode, setViewMode] = useState("ocr");
 
   const [saveText, setSaveText] = useState("");
   const [searchText, setSearchText] = useState("");
@@ -39,7 +36,7 @@ export default function App() {
     try {
       const fd = new FormData();
       fd.append("document", file);
-      const res = await fetch(`${API_BASE}/api/ocr`, { method: "POST", body: fd });
+      const res = await fetch(`${API_BASE}/ocr`, { method: "POST", body: fd });
       const body = await res.json();
       setOcrResult(body);
       setViewMode("ocr");
@@ -53,7 +50,7 @@ export default function App() {
     try {
       const fd = new FormData();
       fd.append("document", file);
-      const res = await fetch(`${API_BASE}/api/parse`, { method: "POST", body: fd });
+      const res = await fetch(`${API_BASE}/parse`, { method: "POST", body: fd });
       const body = await res.json();
       setParseResult(body);
       setViewMode("parse");
@@ -70,7 +67,7 @@ export default function App() {
     setInput("");
     setSending(true);
     try {
-      const res = await fetch(`${API_BASE}/api/chat`, {
+      const res = await fetch(`${API_BASE}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ messages: [{ role: "user", content: text }] })
@@ -117,7 +114,7 @@ export default function App() {
     if (!text) return alert("저장할 텍스트가 없습니다.");
     setSavingEmbed(true);
     try {
-      const res = await fetch(`${API_BASE}/api/embeddings`, {
+      const res = await fetch(`${API_BASE}/embeddings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, metadata: { savedAt: new Date().toISOString() } })
@@ -137,7 +134,7 @@ export default function App() {
     if (!query) return alert("검색어를 입력하세요.");
     setSearchingEmbed(true);
     try {
-      const res = await fetch(`${API_BASE}/api/search`, {
+      const res = await fetch(`${API_BASE}/search`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, topK: 5 })
@@ -161,19 +158,11 @@ export default function App() {
         <section className="panel">
           <h2>문서 업로드</h2>
 
-          <input
-            type="file"
-            accept="image/*,.pdf"
-            onChange={e => setFile(e.target.files?.[0] || null)}
-          />
+          <input type="file" accept="image/*,.pdf" onChange={e => setFile(e.target.files?.[0] || null)} />
 
           {filePreview && (
             <div className="preview">
-              {file.type && file.type.startsWith("image/") ? (
-                <img src={filePreview} alt="preview" />
-              ) : (
-                <div className="file-name">{file.name}</div>
-              )}
+              {file?.type?.startsWith("image/") ? <img src={filePreview} alt="preview" /> : <div className="file-name">{file?.name}</div>}
             </div>
           )}
 
@@ -185,18 +174,8 @@ export default function App() {
           <div className="result">
             <h3>결과</h3>
             <div className="result-buttons">
-              <button 
-                className={`tab-btn ${viewMode === "ocr" ? "active" : ""}`}
-                onClick={() => setViewMode("ocr")}
-              >
-                OCR
-              </button>
-              <button 
-                className={`tab-btn ${viewMode === "parse" ? "active" : ""}`}
-                onClick={() => setViewMode("parse")}
-              >
-                파싱
-              </button>
+              <button className={`tab-btn ${viewMode === "ocr" ? "active" : ""}`} onClick={() => setViewMode("ocr")}>OCR</button>
+              <button className={`tab-btn ${viewMode === "parse" ? "active" : ""}`} onClick={() => setViewMode("parse")}>파싱</button>
             </div>
             <div className="result-content">
               <div className="chat-window small">
@@ -211,45 +190,27 @@ export default function App() {
 
           <div className="embed-controls">
             <h3>Embedding 저장</h3>
-            <textarea
-              rows={2}
-              placeholder="저장할 텍스트를 입력하세요"
-              value={saveText}
-              onChange={e => setSaveText(e.target.value)}
-            />
+            <textarea rows={2} placeholder="저장할 텍스트를 입력하세요" value={saveText} onChange={e => setSaveText(e.target.value)} />
             <div className="row">
-              <button onClick={() => saveEmbedding()} disabled={savingEmbed}>
-                {savingEmbed ? "저장 중..." : "Embedding 저장"}
-              </button>
-              <button onClick={() => setSaveText(getCurrentViewText())} className="secondary">
-                결과로 채우기
-              </button>
+              <button onClick={saveEmbedding} disabled={savingEmbed}>{savingEmbed ? "저장 중..." : "Embedding 저장"}</button>
+              <button onClick={() => setSaveText(getCurrentViewText())} className="secondary">결과로 채우기</button>
             </div>
 
-            <div className="search-section">
+            <div className="search-section" style={{ marginTop: 12 }}>
               <h3>임베딩 검색</h3>
-              <textarea
-                rows={2}
-                placeholder="검색어를 입력하세요"
-                value={searchText}
-                onChange={e => setSearchText(e.target.value)}
-              />
-              <button onClick={doSearch} disabled={searchingEmbed} style={{ marginTop: "8px" }}>
-                {searchingEmbed ? "검색 중..." : "검색"}
-              </button>
+              <textarea rows={2} placeholder="검색어를 입력하세요" value={searchText} onChange={e => setSearchText(e.target.value)} />
+              <button onClick={doSearch} disabled={searchingEmbed} style={{ marginTop: 8 }}>{searchingEmbed ? "검색 중..." : "검색"}</button>
 
-              <div className="result-content" style={{ marginTop: "12px" }}>
+              <div className="result-content" style={{ marginTop: 12 }}>
                 {searchResults.length > 0 ? (
                   <div className="search-results">
                     {searchResults.map((res, idx) => (
                       <div key={idx} className="result-item">
                         <div className="meta">
                           <span className="source">{res.id}</span>
-                          <span className="score">
-                            유사도: <span style={{ fontWeight: 600 }}>{(res.score * 100).toFixed(1)}%</span>
-                          </span>
+                          <span className="score">유사도: <span style={{ fontWeight: 600 }}>{(res.score * 100).toFixed(1)}%</span></span>
                         </div>
-                        <div className="snippet">{res.text.substring(0, 100)}...</div>
+                        <div className="snippet">{(res.text || "").substring(0, 200)}{(res.text || "").length > 200 ? "..." : ""}</div>
                       </div>
                     ))}
                   </div>
@@ -273,15 +234,9 @@ export default function App() {
           </div>
 
           <div className="chat-input">
-            <textarea
-              rows={2}
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="질문을 입력하고 Enter를 누르세요 (Shift+Enter = 줄바꿈)"
-            />
+            <textarea rows={2} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="질문을 입력하고 Enter를 누르세요 (Shift+Enter = 줄바꿈)" />
             <div className="chat-actions">
-              <button onClick={sendMessage}>Send</button>
+              <button onClick={sendMessage} disabled={sending}>{sending ? "보내는 중..." : "Send"}</button>
             </div>
           </div>
         </section>
