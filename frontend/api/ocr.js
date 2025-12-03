@@ -1,27 +1,40 @@
 export const config = { api: { bodyParser: false } };
 
+import { parseMultipart } from "./_utils.js";
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
     const API_KEY = process.env.UPSTAGE_API_KEY;
     const BASE_URL = process.env.UPSTAGE_BASE_URL || "https://api.upstage.ai/v1";
-    const OCR_MODEL = process.env.UPSTAGE_OCR_MODEL || "document-digitization"; // 환경변수로 설정 권장
+    const OCR_MODEL = process.env.UPSTAGE_OCR_MODEL || "document-digitization";
 
-    const contentType = req.headers["content-type"] || "application/octet-stream";
-    const bodyBuffer = await req.arrayBuffer();
+    // multipart 파싱
+    const { fileBuffer, filename, fileContentType } = await parseMultipart(req);
 
-    const r = await fetch(`${BASE_URL}/document-digitization?model=${encodeURIComponent(OCR_MODEL)}`, {
+    // Node18의 Web FormData/Blob 사용
+    const form = new FormData();
+    const blob = new Blob([fileBuffer], { type: fileContentType });
+    form.append("file", blob, filename);
+    form.append("model", OCR_MODEL);
+
+    const r = await fetch(`${BASE_URL}/document-digitization`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        "Content-Type": contentType
+        Authorization: `Bearer ${API_KEY}`
       },
-      body: bodyBuffer
+      body: form
     });
 
-    const json = await r.json();
-    res.status(r.status).json(json);
+    const ct = r.headers.get("content-type") || "";
+    if (!r.ok) {
+      const errPayload = ct.includes("application/json") ? await r.json() : await r.text();
+      return res.status(r.status).json({ error: errPayload || "OCR request failed" });
+    }
+
+    const responseBody = ct.includes("application/json") ? await r.json() : await r.text();
+    return res.status(200).json(ct.includes("application/json") ? responseBody : { text: responseBody });
   } catch (e) {
-    res.status(500).json({ error: e.message || String(e) });
+    return res.status(500).json({ error: e.message || String(e) });
   }
 }

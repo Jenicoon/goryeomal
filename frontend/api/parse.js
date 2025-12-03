@@ -1,34 +1,38 @@
 export const config = { api: { bodyParser: false } };
 
+import { parseMultipart } from "./_utils.js";
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   try {
     const API_KEY = process.env.UPSTAGE_API_KEY;
     const BASE_URL = process.env.UPSTAGE_BASE_URL || "https://api.upstage.ai/v1";
-    const PARSE_MODEL = process.env.UPSTAGE_PARSE_MODEL || "document-parsing"; // 환경변수로 설정 권장
+    const PARSE_MODEL = process.env.UPSTAGE_PARSE_MODEL || "document-parsing";
 
-    // 원본 Content-Type 유지, 바디를 버퍼로 변환
-    const contentType = req.headers["content-type"] || "application/octet-stream";
-    const bodyBuffer = await req.arrayBuffer();
+    const { fileBuffer, filename, fileContentType } = await parseMultipart(req);
+
+    const form = new FormData();
+    const blob = new Blob([fileBuffer], { type: fileContentType });
+    form.append("file", blob, filename);
+    form.append("model", PARSE_MODEL);
 
     const r = await fetch(`${BASE_URL}/document-parsing`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${API_KEY}`,
-        "Content-Type": contentType
+        Authorization: `Bearer ${API_KEY}`
       },
-      // Upstage는 model 필드가 필요합니다. multipart/form-data로 전송하는 경우 쿼리스트링이나 form-data 파트로 넣어야 합니다.
-      // 간단히 쿼리스트링으로 모델 지정:
-      body: bodyBuffer
+      body: form
     });
 
-    // 모델 지정이 필요한 경우 엔드포인트를 `${BASE_URL}/document-parsing?model=${encodeURIComponent(PARSE_MODEL)}`로 호출하세요.
-    // 위 r 호출을 다음처럼 바꿔도 됩니다:
-    // const r = await fetch(`${BASE_URL}/document-parsing?model=${encodeURIComponent(PARSE_MODEL)}`, { ... })
+    const ct = r.headers.get("content-type") || "";
+    if (!r.ok) {
+      const errPayload = ct.includes("application/json") ? await r.json() : await r.text();
+      return res.status(r.status).json({ error: errPayload || "Parse request failed" });
+    }
 
-    const json = await r.json();
-    res.status(r.status).json(json);
+    const responseBody = ct.includes("application/json") ? await r.json() : await r.text();
+    return res.status(200).json(ct.includes("application/json") ? responseBody : { text: responseBody });
   } catch (e) {
-    res.status(500).json({ error: e.message || String(e) });
+    return res.status(500).json({ error: e.message || String(e) });
   }
 }
