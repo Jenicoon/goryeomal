@@ -35,6 +35,11 @@ pre.json { margin:0; font-size:13px; color:#0b1220; overflow:auto; max-height:32
 .bubble { max-width: 78%; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.5; box-shadow: 0 1px 0px rgba(2,6,23,0.02); word-break: break-word; }
 .msg.user .bubble { background: var(--user-bg); color: #06364b; border-bottom-right-radius: 6px; }
 .msg.assistant .bubble { background: var(--assistant-bg); color: #0f172a; border-bottom-left-radius: 6px; }
+.bubble h1, .bubble h2, .bubble h3 { margin: 6px 0; }
+.bubble p { margin: 6px 0; }
+.bubble ul, .bubble ol { margin: 6px 0 6px 18px; }
+.bubble code { background: #f3f4f6; padding: 2px 4px; border-radius: 4px; }
+.bubble pre code { background: #0b1220; color: #f8fafc; display:block; padding:10px; border-radius:8px; }
 .chat-input { display:flex; gap:8px; align-items:flex-end; padding-top:8px; }
 .chat-input textarea { flex:1; resize:none; padding:10px; border-radius:10px; border:1px solid #e6edf3; min-height:46px; font-size:14px; }
 .chat-actions button { padding:10px 16px; }

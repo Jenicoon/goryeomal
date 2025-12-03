@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import "./App.css";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function App() {
   const isLocal = typeof window !== "undefined" && window.location.hostname === "localhost";
@@ -184,7 +186,11 @@ export default function App() {
               <div className="chat-window small">
                 {viewMessages().map(m => (
                   <div key={m.id} className={`msg ${m.role === "user" ? "user" : "assistant"}`}>
-                    <div className="bubble">{m.content}</div>
+                    <div className="bubble">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {m.content}
+                      </ReactMarkdown>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -231,7 +237,11 @@ export default function App() {
           <div className="chat-window">
             {messages.map(m => (
               <div key={m.id} className={`msg ${m.role === "user" ? "user" : "assistant"}`}>
-                <div className="bubble">{m.content}</div>
+                <div className="bubble">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {m.content}
+                  </ReactMarkdown>
+                </div>
               </div>
             ))}
           </div>
