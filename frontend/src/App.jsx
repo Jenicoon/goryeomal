@@ -3,7 +3,10 @@ import { createRoot } from "react-dom/client";
 import "./App.css";
 
 export default function App() {
-  const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:3000/api";
+  const isLocal = typeof window !== "undefined" && window.location.hostname === "localhost";
+  const API_BASE =
+    process.env.REACT_APP_API_BASE ||
+    (isLocal ? "http://localhost:3000/api" : "https://goryeomal.onrender.com/api");
 
   const [file, setFile] = useState(null);
   const [filePreview, setFilePreview] = useState(null);
