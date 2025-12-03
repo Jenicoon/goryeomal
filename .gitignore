@@ -1,0 +1,6 @@
+# 환경변수/비밀
+.env
+.env.local
+frontend/.env
+frontend/.env.local
+backend/.env
