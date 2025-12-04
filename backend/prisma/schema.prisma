@@ -9,8 +9,17 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
+}
+
+model ChatSession {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  messages  ChatMessage[]
 }
 
 model ChatMessage {
@@ -20,6 +29,7 @@ model ChatMessage {
   role      String
   content   String
   createdAt DateTime @default(now())
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 }
 
 model Embedding {
@@ -27,7 +37,7 @@ model Embedding {
   userId    String
   sessionId String
   text      String
-  vector    Json
-  metadata  Json?
+  vector    String   // JSON 문자열로 저장
+  metadata  String?  // JSON 문자열로 저장
   createdAt DateTime @default(now())
 }

@@ -1,82 +1,182 @@
 import React, { useState, useEffect } from "react";
-import { createRoot } from "react-dom/client";
-import "./App.css";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+// import { createRoot } from "react-dom/client"; // 제거: index.js에서 렌더링
+import "./App.css";
 
 export default function App() {
-  const isLocal = typeof window !== "undefined" && window.location.hostname === "localhost";
-  const API_BASE =
-    process.env.REACT_APP_API_BASE ||
-    (isLocal ? "http://localhost:3000/api" : "https://goryeomal.onrender.com/api");
+  const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:3000/api";
 
+  // 파일 업로드 관련 상태/프리뷰
   const [file, setFile] = useState(null);
-  const [filePreview, setFilePreview] = useState(null);
-  const [ocrResult, setOcrResult] = useState(null);
-  const [parseResult, setParseResult] = useState(null);
-  const [messages, setMessages] = useState([{ id: 1, role: "assistant", content: "안녕하세요. 무엇을 도와드릴까요?" }]);
-  const [input, setInput] = useState("");
-  const [viewMode, setViewMode] = useState("ocr");
-
-  const [saveText, setSaveText] = useState("");
-  const [searchText, setSearchText] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-
-  const [savingEmbed, setSavingEmbed] = useState(false);
-  const [searchingEmbed, setSearchingEmbed] = useState(false);
-  const [sending, setSending] = useState(false);
-
-  const [sessionId] = useState(() => crypto.randomUUID());
-  const [userId] = useState(() => {
-    const k = "goryeomal_user_id";
-    const existing = localStorage.getItem(k);
-    if (existing) return existing;
-    const uid = crypto.randomUUID();
-    localStorage.setItem(k, uid);
-    return uid;
-  });
+  const [filePreview, setFilePreview] = useState("");
 
   useEffect(() => {
-    if (!file) {
-      setFilePreview(null);
-      return;
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setFilePreview(url);
+      return () => URL.revokeObjectURL(url);
+    } else {
+      setFilePreview("");
     }
-    const url = URL.createObjectURL(file);
-    setFilePreview(url);
-    return () => URL.revokeObjectURL(url);
   }, [file]);
 
+  // 결과 탭 상태 및 메시지 뷰
+  const [viewMode, setViewMode] = useState("ocr"); // "ocr" | "parse"
+  const [ocrMessages, setOcrMessages] = useState([]);
+  const [parseMessages, setParseMessages] = useState([]);
+  function viewMessages() {
+    return viewMode === "ocr" ? ocrMessages : parseMessages;
+  }
+  function getCurrentViewText() {
+    const msgs = viewMessages();
+    return msgs.map(m => m.content).join("\n");
+  }
+
+  // 업로드 핸들러들(최소 구현)
   async function uploadOCR() {
     if (!file) return alert("파일을 선택하세요.");
+    const fd = new FormData();
+    fd.append("document", file);
     try {
-      const fd = new FormData();
-      fd.append("document", file);
       const res = await fetch(`${API_BASE}/ocr`, { method: "POST", body: fd });
       const body = await res.json();
-      setOcrResult(body);
+      const text = body?.text || body?.content || JSON.stringify(body);
+      setOcrMessages([{ id: Date.now(), role: "assistant", content: text }]);
       setViewMode("ocr");
-    } catch (err) {
-      alert("OCR 오류: " + (err.message || err));
+    } catch (e) {
+      setOcrMessages([{ id: Date.now(), role: "assistant", content: "OCR 요청 실패" }]);
     }
   }
 
   async function uploadParse() {
     if (!file) return alert("파일을 선택하세요.");
+    const fd = new FormData();
+    fd.append("document", file);
     try {
-      const fd = new FormData();
-      fd.append("document", file);
       const res = await fetch(`${API_BASE}/parse`, { method: "POST", body: fd });
       const body = await res.json();
-      setParseResult(body);
+      const text = body?.text || body?.content || JSON.stringify(body);
+      setParseMessages([{ id: Date.now(), role: "assistant", content: text }]);
       setViewMode("parse");
-    } catch (err) {
-      alert("파싱 오류: " + (err.message || err));
+    } catch (e) {
+      setParseMessages([{ id: Date.now(), role: "assistant", content: "파싱 요청 실패" }]);
     }
   }
+
+  // Embedding 저장/검색 상태/핸들러
+  const [saveText, setSaveText] = useState("");
+  const [savingEmbed, setSavingEmbed] = useState(false);
+  async function saveEmbedding() {
+    const text = (saveText || "").trim();
+    if (!text) return alert("저장할 텍스트를 입력하세요.");
+    setSavingEmbed(true);
+    try {
+      const res = await fetch(`${API_BASE}/embeddings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      const body = await res.json();
+      alert(body?.message || "저장 완료");
+    } catch {
+      alert("저장 실패");
+    } finally {
+      setSavingEmbed(false);
+    }
+  }
+
+  const [searchText, setSearchText] = useState("");
+  const [searchingEmbed, setSearchingEmbed] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  async function doSearch() {
+    const query = (searchText || "").trim();
+    if (!query) return;
+    setSearchingEmbed(true);
+    try {
+      const res = await fetch(`${API_BASE}/search`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query })
+      });
+      const body = await res.json();
+      setSearchResults(body?.results || []);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearchingEmbed(false);
+    }
+  }
+
+  // 사용자/세션 식별자
+  const [userId] = useState(() => {
+    const k = "goryeomal_user_id";
+    const existing = localStorage.getItem(k);
+    if (existing) return existing;
+    const uid = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+    localStorage.setItem(k, uid);
+    return uid;
+  });
+  const [sessionId, setSessionId] = useState(localStorage.getItem("goryeomal_session_id") || "");
+  const [sessions, setSessions] = useState([]);
+
+  // 채팅 상태
+  const [messages, setMessages] = useState([{ id: 1, role: "assistant", content: "안녕하세요. 무엇을 도와드릴까요?" }]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+
+  // 세션 목록 로드
+  async function loadSessions() {
+    try {
+      const res = await fetch(`${API_BASE}/chat/sessions?userId=${encodeURIComponent(userId)}`);
+      const body = await res.json();
+      setSessions(body.sessions || []);
+    } catch {
+      setSessions([]);
+    }
+  }
+
+  // 세션 생성/선택/불러오기
+  async function createNewSession() {
+    const title = prompt("세션 제목을 입력하세요", "새 대화");
+    if (!title) return;
+    const res = await fetch(`${API_BASE}/chat/session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, title })
+    });
+    const body = await res.json();
+    if (body.id) {
+      setSessionId(body.id);
+      localStorage.setItem("goryeomal_session_id", body.id);
+      await loadSession(body.id);
+      await loadSessions();
+    } else {
+      alert("세션 생성 실패");
+    }
+  }
+
+  async function loadSession(id) {
+    const res = await fetch(`${API_BASE}/chat/session/${encodeURIComponent(id)}?userId=${encodeURIComponent(userId)}`);
+    const body = await res.json();
+    setSessionId(id);
+    localStorage.setItem("goryeomal_session_id", id);
+    const msgs = (body.messages || []).map(m => ({ id: m.id, role: m.role, content: m.content }));
+    setMessages(msgs.length ? msgs : [{ id: 1, role: "assistant", content: "새 대화를 시작하세요." }]);
+  }
+
+  useEffect(() => { loadSessions(); }, []);
+  useEffect(() => {
+    if (sessionId) loadSession(sessionId);
+  }, [sessionId]);
 
   async function sendMessage() {
     const text = input.trim();
     if (!text) return;
+    if (!sessionId) {
+      await createNewSession();
+      if (!sessionId) return;
+    }
     const userMsg = { id: Date.now(), role: "user", content: text };
     setMessages(prev => [...prev, userMsg]);
     setInput("");
@@ -85,12 +185,13 @@ export default function App() {
       const res = await fetch(`${API_BASE}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [{ role: "user", content: text }], sessionId, userId })
+        body: JSON.stringify({ userId, sessionId, messages: [{ role: "user", content: text }] })
       });
       const body = await res.json();
       const assistantContent = body?.content || JSON.stringify(body, null, 2);
       const assistantMsg = { id: Date.now() + 1, role: "assistant", content: assistantContent };
       setMessages(prev => [...prev, assistantMsg]);
+      loadSessions();
     } catch (err) {
       const errMsg = { id: Date.now() + 1, role: "assistant", content: "응답 중 오류가 발생했습니다." };
       setMessages(prev => [...prev, errMsg]);
@@ -99,78 +200,40 @@ export default function App() {
     }
   }
 
-  function handleKeyDown(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }
-
-  function getCurrentViewText() {
-    if (viewMode === "ocr" && ocrResult) return ocrResult.text || JSON.stringify(ocrResult, null, 2);
-    if (viewMode === "parse" && parseResult) return parseResult.text || JSON.stringify(parseResult, null, 2);
-    return "";
-  }
-
-  function viewMessages() {
-    if (viewMode === "ocr") {
-      if (!ocrResult) return [{ id: "no-ocr", role: "assistant", content: "OCR을 실행하세요." }];
-      return [{ id: "ocr", role: "assistant", content: ocrResult.text || JSON.stringify(ocrResult, null, 2) }];
-    }
-    if (viewMode === "parse") {
-      if (!parseResult) return [{ id: "no-parse", role: "assistant", content: "파싱을 실행하세요." }];
-      return [{ id: "parse", role: "assistant", content: parseResult.text || JSON.stringify(parseResult, null, 2) }];
-    }
-    return [];
-  }
-
-  async function saveEmbedding() {
-    const text = (saveText || getCurrentViewText() || "").trim();
-    if (!text) return alert("저장할 텍스트가 없습니다.");
-    setSavingEmbed(true);
-    try {
-      const res = await fetch(`${API_BASE}/embeddings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, metadata: { savedAt: new Date().toISOString() }, sessionId, userId })
-      });
-      const body = await res.json();
-      alert("Embedding 저장 완료: " + (body.id || "ok"));
-      setSaveText("");
-    } catch (err) {
-      alert("저장 실패: " + (err.message || err));
-    } finally {
-      setSavingEmbed(false);
-    }
-  }
-
-  async function doSearch() {
-    const query = (searchText || "").trim();
-    if (!query) return alert("검색어를 입력하세요.");
-    setSearchingEmbed(true);
-    try {
-      const res = await fetch(`${API_BASE}/search`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, topK: 5 })
-      });
-      const body = await res.json();
-      setSearchResults(body.results || []);
-    } catch (err) {
-      alert("검색 실패: " + (err.message || err));
-    } finally {
-      setSearchingEmbed(false);
-    }
+  function SessionList() {
+    return (
+      <div className="session-list">
+        <div className="row" style={{ justifyContent: "space-between" }}>
+          <h3 style={{ margin: 0, color: "var(--muted)" }}>대화 세션</h3>
+          <button className="ghost" onClick={createNewSession}>새 세션</button>
+        </div>
+        <div className="session-items">
+          {sessions.length === 0 ? (
+            <div className="placeholder">세션이 없습니다. 새 세션을 만들어 주세요.</div>
+          ) : (
+            sessions.map(s => (
+              <button
+                key={s.id}
+                className={`session-item ${sessionId === s.id ? "active" : ""}`}
+                onClick={() => loadSession(s.id)}
+                title={new Date(s.updatedAt).toLocaleString()}
+              >
+                <span className="title">{s.title}</span>
+                <span className="date">{new Date(s.createdAt).toLocaleDateString()}</span>
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="app">
-      <header className="header">
-        <h1>고려말 언어 보존 도구</h1>
-      </header>
-
+      <header className="header"><h1>고려말 언어 보존 도구</h1></header>
       <main className="grid">
         <section className="panel">
+          <SessionList />
           <h2>문서 업로드</h2>
 
           <input type="file" accept="image/*,.pdf" onChange={e => setFile(e.target.files?.[0] || null)} />
@@ -243,7 +306,6 @@ export default function App() {
 
         <section className="panel chat-panel">
           <h2>AI 대화</h2>
-
           <div className="chat-window">
             {messages.map(m => (
               <div key={m.id} className={`msg ${m.role === "user" ? "user" : "assistant"}`}>
@@ -255,12 +317,11 @@ export default function App() {
               </div>
             ))}
           </div>
-
           <div className="chat-input">
-            <textarea rows={2} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder="질문을 입력하고 Enter를 누르세요 (Shift+Enter = 줄바꿈)" />
-            <div className="chat-actions">
-              <button onClick={sendMessage} disabled={sending}>{sending ? "보내는 중..." : "Send"}</button>
-            </div>
+            <textarea rows={2} value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => {
+              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+            }} placeholder="질문을 입력하고 Enter를 누르세요 (Shift+Enter = 줄바꿈)" />
+            <div className="chat-actions"><button onClick={sendMessage} disabled={sending}>{sending ? "보내는 중..." : "Send"}</button></div>
           </div>
         </section>
       </main>
@@ -268,5 +329,6 @@ export default function App() {
   );
 }
 
-const root = createRoot(document.getElementById("root"));
-root.render(<App />);
+// 제거: index.js가 렌더링을 담당
+// const root = createRoot(document.getElementById("root"));
+// root.render(<App />);

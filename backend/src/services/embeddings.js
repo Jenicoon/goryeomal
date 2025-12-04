@@ -1,5 +1,6 @@
 import fetch from "node-fetch";
-import { PrismaClient } from "@prisma/client";
+import pkg from "@prisma/client";
+const { PrismaClient } = pkg;
 const prisma = new PrismaClient();
 
 // 데모용 인메모리 스토어 (프로덕션은 벡터DB 권장)
@@ -30,27 +31,44 @@ async function createEmbedding(text) {
 }
 
 export async function saveEmbeddingHandler(text, id, metadata, sessionId = "default", userId = "anonymous") {
-  const vector = await createEmbedding(text);
+  const vector = await createEmbedding(text); // number[]
   const row = await prisma.embedding.create({
-    data: { id: id || undefined, userId, sessionId, text, vector, metadata: metadata || {} }
+    data: {
+      id: id || undefined,
+      userId,
+      sessionId,
+      text,
+      vector: JSON.stringify(vector),               // 직렬화
+      metadata: metadata ? JSON.stringify(metadata) : null
+    }
   });
   return { id: row.id, message: "saved" };
-}
-
-export async function searchHandler(query, topK = 5) {
-  const qVec = await createEmbedding(query);
-  const results = store
-    .map(item => ({ id: item.id, text: item.text, metadata: item.metadata, score: cosine(qVec, item.vector) }))
-    .sort((a, b) => b.score - a.score)
-    .slice(0, topK);
-  return { results };
 }
 
 export async function listHandler(userId, sessionId) {
   const items = await prisma.embedding.findMany({
     where: { userId, sessionId },
     orderBy: { createdAt: "desc" },
-    select: { id: true, text: true, metadata: true, createdAt: true }
+    select: { id: true, text: true, metadata: true, createdAt: true, vector: true }
   });
-  return { count: items.length, items };
+  // 역직렬화
+  const mapped = items.map(it => ({
+    ...it,
+    vector: it.vector ? JSON.parse(it.vector) : [],
+    metadata: it.metadata ? JSON.parse(it.metadata) : null
+  }));
+  return { count: mapped.length, items: mapped };
+}
+
+export async function searchHandler(query, topK = 5) {
+  const qVec = await createEmbedding(query);
+  const items = await prisma.embedding.findMany();
+  const results = items
+    .map(it => {
+      const vec = it.vector ? JSON.parse(it.vector) : [];
+      return { id: it.id, text: it.text, metadata: it.metadata ? JSON.parse(it.metadata) : null, score: cosine(qVec, vec) };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK);
+  return { results };
 }
