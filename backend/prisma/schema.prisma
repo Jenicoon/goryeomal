@@ -19,17 +19,22 @@ model ChatSession {
   title     String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  messages  ChatMessage[]
+
+  messages  Message[]
+
+  @@index([userId])
 }
 
-model ChatMessage {
-  id        String   @id @default(cuid())
-  userId    String
-  sessionId String
-  role      String
-  content   String
-  createdAt DateTime @default(now())
-  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+model Message {
+  id         String   @id @default(cuid())
+  sessionId  String
+  role       String
+  content    String
+  createdAt  DateTime @default(now())
+
+  session    ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
 }
 
 model Embedding {
@@ -37,7 +42,8 @@ model Embedding {
   userId    String
   sessionId String?
   text      String
-  vector    Bytes?   // SQLite는 Json 미지원. 벡터는 바이너리로 저장(선택사항).
+  vector    String?
+  metadata  String?
   createdAt DateTime @default(now())
 
   @@index([userId])

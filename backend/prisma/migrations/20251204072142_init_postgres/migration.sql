@@ -10,15 +10,14 @@ CREATE TABLE "ChatSession" (
 );
 
 -- CreateTable
-CREATE TABLE "ChatMessage" (
+CREATE TABLE "Message" (
     "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
     "sessionId" TEXT NOT NULL,
     "role" TEXT NOT NULL,
     "content" TEXT NOT NULL,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "ChatMessage_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "Message_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -27,11 +26,18 @@ CREATE TABLE "Embedding" (
     "userId" TEXT NOT NULL,
     "sessionId" TEXT,
     "text" TEXT NOT NULL,
-    "vector" BYTEA,
+    "vector" TEXT,
+    "metadata" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "Embedding_pkey" PRIMARY KEY ("id")
 );
+
+-- CreateIndex
+CREATE INDEX "ChatSession_userId_idx" ON "ChatSession"("userId");
+
+-- CreateIndex
+CREATE INDEX "Message_sessionId_idx" ON "Message"("sessionId");
 
 -- CreateIndex
 CREATE INDEX "Embedding_userId_idx" ON "Embedding"("userId");
@@ -40,4 +46,4 @@ CREATE INDEX "Embedding_userId_idx" ON "Embedding"("userId");
 CREATE INDEX "Embedding_userId_sessionId_idx" ON "Embedding"("userId", "sessionId");
 
 -- AddForeignKey
-ALTER TABLE "ChatMessage" ADD CONSTRAINT "ChatMessage_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "ChatSession"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Message" ADD CONSTRAINT "Message_sessionId_fkey" FOREIGN KEY ("sessionId") REFERENCES "ChatSession"("id") ON DELETE CASCADE ON UPDATE CASCADE;
