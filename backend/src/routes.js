@@ -1,9 +1,9 @@
 import express from "express";
 import multer from "multer";
-import { chatHandler, createSession, listSessions, getSession } from "./services/chat.js";
+import { createSession, listSessions, getSession, deleteSession, chatHandler } from "./services/chat.js";
 import { ocrHandler } from "./services/ocr.js";
 import { parseHandler } from "./services/parse.js";
-import { saveEmbeddingHandler, searchHandler, listHandler } from "./services/embeddings.js";
+import { saveEmbedding, searchEmbeddings, listAllEmbeddings, deleteEmbeddingById } from "./services/embeddings.js";
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -13,28 +13,47 @@ router.post("/chat/session", async (req, res) => {
   try {
     const { userId, title } = req.body || {};
     if (!userId) return res.status(400).json({ error: "userId required" });
-    const s = await createSession(userId, title || "새 대화");
+    const s = await createSession(String(userId), String(title || "새 대화"));
     res.json(s);
-  } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
+  } catch (e) {
+    res.status(500).json({ error: e.message || String(e) });
+  }
 });
 
 router.get("/chat/sessions", async (req, res) => {
   try {
-    const { userId } = req.query;
+    const userId = String(req.query.userId || "");
     if (!userId) return res.status(400).json({ error: "userId required" });
-    const list = await listSessions(String(userId));
-    res.json(list);
-  } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
+    const sessions = await listSessions(userId);
+    res.json({ sessions });
+  } catch (e) {
+    res.status(500).json({ error: e.message || String(e) });
+  }
 });
 
 router.get("/chat/session/:id", async (req, res) => {
   try {
-    const { userId } = req.query;
     const sessionId = req.params.id;
+    const userId = String(req.query.userId || "");
     if (!userId) return res.status(400).json({ error: "userId required" });
-    const data = await getSession(sessionId, String(userId));
+    const data = await getSession(sessionId, userId);
     res.json(data);
-  } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
+  } catch (e) {
+    res.status(500).json({ error: e.message || String(e) });
+  }
+});
+
+// Delete a session
+router.delete("/chat/session/:id", async (req, res) => {
+  try {
+    const sessionId = req.params.id;
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    const r = await deleteSession(sessionId, String(userId));
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ error: e.message || String(e) });
+  }
 });
 
 // Send message in a session
@@ -66,19 +85,21 @@ router.post("/parse", upload.single("document"), async (req, res) => {
 
 router.post("/embeddings", async (req, res) => {
   try {
-    const { text, id, metadata, sessionId = "default", userId = "anonymous" } = req.body || {};
+    const { userId, sessionId, text } = req.body || {};
+    if (!userId) return res.status(400).json({ error: "userId required" });
     if (!text) return res.status(400).json({ error: "text required" });
-    const result = await saveEmbeddingHandler(text, id, metadata, sessionId, userId);
-    res.json(result);
+    const r = await saveEmbedding({ userId: String(userId), sessionId: String(sessionId || ""), text, vector: null });
+    res.json({ message: "saved", id: r.id });
   } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
 });
 
 router.post("/search", async (req, res) => {
   try {
-    const { query, topK = 5 } = req.body || {};
+    const { userId, sessionId, query } = req.body || {};
+    if (!userId) return res.status(400).json({ error: "userId required" });
     if (!query) return res.status(400).json({ error: "query required" });
-    const result = await searchHandler(query, topK);
-    res.json(result);
+    const results = await searchEmbeddings({ userId: String(userId), sessionId: String(sessionId || ""), query });
+    res.json({ results });
   } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
 });
 
@@ -88,6 +109,30 @@ router.get("/embeddings/list", async (req, res) => {
     const list = await listHandler(String(userId || "anonymous"), String(sessionId || "default"));
     res.json(list);
   } catch (e) { res.status(500).json({ error: e.message || String(e) }); }
+});
+
+router.get("/embeddings/all", async (req, res) => {
+  try {
+    const userId = String(req.query.userId || "");
+    const sessionId = String(req.query.sessionId || "");
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    const items = await listAllEmbeddings({ userId, sessionId });
+    res.json({ items });
+  } catch (e) {
+    res.status(500).json({ error: e.message || String(e) });
+  }
+});
+
+router.delete("/embeddings/:id", async (req, res) => {
+  try {
+    const id = req.params.id;
+    const { userId } = req.body || {};
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    const r = await deleteEmbeddingById({ id, userId: String(userId) });
+    res.json(r);
+  } catch (e) {
+    res.status(500).json({ error: e.message || String(e) });
+  }
 });
 
 export default router;

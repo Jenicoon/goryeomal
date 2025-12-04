@@ -72,3 +72,55 @@ export async function searchHandler(query, topK = 5) {
     .slice(0, topK);
   return { results };
 }
+
+// 텍스트를 저장(사용자/세션 단위)
+export async function saveEmbedding({ userId, sessionId, text, vector }) {
+  if (!userId) throw new Error("userId required");
+  if (!text) throw new Error("text required");
+  return prisma.embedding.create({
+    data: {
+      userId,
+      sessionId: sessionId || null,
+      text,
+      vector: vector || null
+    },
+    select: { id: true }
+  });
+}
+
+// 사용자/세션 범위의 검색(유사도 계산은 DB/벡터DB에 따라 구현)
+export async function searchEmbeddings({ userId, sessionId, query }) {
+  if (!userId) throw new Error("userId required");
+  if (!query) throw new Error("query required");
+  const where = { userId, ...(sessionId ? { sessionId } : {}) };
+  const rows = await prisma.embedding.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: { id: true, text: true }
+  });
+  const q = query.toLowerCase();
+  return rows
+    .map(r => ({
+      id: r.id,
+      text: r.text,
+      score: r.text.toLowerCase().includes(q) ? 0.9 : 0.1
+    }))
+    .sort((a, b) => b.score - a.score);
+}
+
+export async function listAllEmbeddings({ userId, sessionId }) {
+  const where = { userId, ...(sessionId ? { sessionId } : {}) };
+  return prisma.embedding.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    select: { id: true, text: true, userId: true, sessionId: true, createdAt: true }
+  });
+}
+
+export async function deleteEmbeddingById({ id, userId }) {
+  const row = await prisma.embedding.findFirst({ where: { id, userId } });
+  if (!row) throw new Error("not found");
+  await prisma.embedding.delete({ where: { id } });
+  return { ok: true };
+}

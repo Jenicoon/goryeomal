@@ -35,9 +35,11 @@ model ChatMessage {
 model Embedding {
   id        String   @id @default(cuid())
   userId    String
-  sessionId String
+  sessionId String?
   text      String
-  vector    String   // JSON 문자열로 저장
-  metadata  String?  // JSON 문자열로 저장
+  vector    Bytes?   // SQLite는 Json 미지원. 벡터는 바이너리로 저장(선택사항).
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, sessionId])
 }

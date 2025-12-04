@@ -9,12 +9,10 @@ export async function createSession(userId, title = "새 대화") {
 }
 
 export async function listSessions(userId) {
-  const rows = await prisma.chatSession.findMany({
+  return prisma.chatSession.findMany({
     where: { userId },
-    orderBy: { updatedAt: "desc" },
-    select: { id: true, title: true, createdAt: true, updatedAt: true }
+    orderBy: { updatedAt: "desc" }
   });
-  return { sessions: rows };
 }
 
 export async function getSession(sessionId, userId) {
@@ -60,4 +58,12 @@ export async function chatHandler(messages, sessionId, userId) {
   await prisma.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } });
 
   return { content };
+}
+
+export async function deleteSession(sessionId, userId) {
+  // 권한 체크: 해당 userId의 세션인지 확인
+  const s = await prisma.chatSession.findFirst({ where: { id: sessionId, userId } });
+  if (!s) throw new Error("session not found");
+  await prisma.chatSession.delete({ where: { id: sessionId } }); // onDelete: Cascade로 메시지 삭제
+  return { ok: true };
 }
