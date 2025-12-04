@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import { chatHandler } from "./services/chat.js";
+import { chatHandler, getChatHistory } from "./services/chat.js";
 import { ocrHandler } from "./services/ocr.js";
 import { parseHandler } from "./services/parse.js";
 import { saveEmbeddingHandler, searchHandler, listHandler } from "./services/embeddings.js";
@@ -11,9 +11,19 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Chat
 router.post("/chat", async (req, res) => {
   try {
-    const { messages } = req.body || {};
+    const { messages, sessionId, userId } = req.body || {};
     if (!messages || !Array.isArray(messages)) return res.status(400).json({ error: "messages required" });
-    const result = await chatHandler(messages);
+    const result = await chatHandler(messages, sessionId || "default", userId || "anonymous");
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message || String(e) });
+  }
+});
+
+router.get("/chat/history", async (req, res) => {
+  try {
+    const { sessionId = "default", userId = "anonymous", limit = 50 } = req.query;
+    const result = await getChatHistory(String(sessionId), String(userId), Number(limit));
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message || String(e) });
@@ -46,9 +56,9 @@ router.post("/parse", upload.single("document"), async (req, res) => {
 // Embeddings 저장
 router.post("/embeddings", async (req, res) => {
   try {
-    const { text, id, metadata } = req.body || {};
+    const { text, id, metadata, sessionId = "default", userId = "anonymous" } = req.body || {};
     if (!text) return res.status(400).json({ error: "text required" });
-    const result = await saveEmbeddingHandler(text, id, metadata);
+    const result = await saveEmbeddingHandler(text, id, metadata, sessionId, userId);
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message || String(e) });

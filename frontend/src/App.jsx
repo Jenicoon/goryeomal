@@ -26,6 +26,16 @@ export default function App() {
   const [searchingEmbed, setSearchingEmbed] = useState(false);
   const [sending, setSending] = useState(false);
 
+  const [sessionId] = useState(() => crypto.randomUUID());
+  const [userId] = useState(() => {
+    const k = "goryeomal_user_id";
+    const existing = localStorage.getItem(k);
+    if (existing) return existing;
+    const uid = crypto.randomUUID();
+    localStorage.setItem(k, uid);
+    return uid;
+  });
+
   useEffect(() => {
     if (!file) {
       setFilePreview(null);
@@ -75,7 +85,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [{ role: "user", content: text }] })
+        body: JSON.stringify({ messages: [{ role: "user", content: text }], sessionId, userId })
       });
       const body = await res.json();
       const assistantContent = body?.content || JSON.stringify(body, null, 2);
@@ -122,7 +132,7 @@ export default function App() {
       const res = await fetch(`${API_BASE}/embeddings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, metadata: { savedAt: new Date().toISOString() } })
+        body: JSON.stringify({ text, metadata: { savedAt: new Date().toISOString() }, sessionId, userId })
       });
       const body = await res.json();
       alert("Embedding 저장 완료: " + (body.id || "ok"));

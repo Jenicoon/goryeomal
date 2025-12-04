@@ -1,4 +1,6 @@
 import fetch from "node-fetch";
+import { PrismaClient } from "@prisma/client";
+const prisma = new PrismaClient();
 
 // 데모용 인메모리 스토어 (프로덕션은 벡터DB 권장)
 const store = []; // { id, vector:number[], text, metadata }
@@ -27,11 +29,12 @@ async function createEmbedding(text) {
   return vector;
 }
 
-export async function saveEmbeddingHandler(text, id, metadata) {
+export async function saveEmbeddingHandler(text, id, metadata, sessionId = "default", userId = "anonymous") {
   const vector = await createEmbedding(text);
-  const docId = id || `doc-${Date.now()}`;
-  store.push({ id: docId, vector, text, metadata: metadata || {} });
-  return { id: docId, message: "saved" };
+  const row = await prisma.embedding.create({
+    data: { id: id || undefined, userId, sessionId, text, vector, metadata: metadata || {} }
+  });
+  return { id: row.id, message: "saved" };
 }
 
 export async function searchHandler(query, topK = 5) {
@@ -43,6 +46,11 @@ export async function searchHandler(query, topK = 5) {
   return { results };
 }
 
-export async function listHandler() {
-  return { count: store.length, items: store.map(s => ({ id: s.id, text: s.text })) };
+export async function listHandler(userId, sessionId) {
+  const items = await prisma.embedding.findMany({
+    where: { userId, sessionId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, text: true, metadata: true, createdAt: true }
+  });
+  return { count: items.length, items };
 }

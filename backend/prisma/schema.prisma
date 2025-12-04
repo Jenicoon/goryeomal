@@ -15,14 +15,17 @@ datasource db {
 
 model ChatMessage {
   id        String   @id @default(cuid())
+  userId    String
+  sessionId String
   role      String
   content   String
-  sessionId String
   createdAt DateTime @default(now())
 }
 
 model Embedding {
   id        String   @id @default(cuid())
+  userId    String
+  sessionId String
   text      String
   vector    Json
   metadata  Json?
