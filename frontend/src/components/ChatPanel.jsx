@@ -17,7 +17,7 @@ export default function ChatPanel({
               <div key={m.id} className={`msg ${m.role === "user" ? "user" : "assistant"}`}>
                 <div className="bubble">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {m.content}
+                    {typeof m.content === "string" ? m.content : `\n\n\`\`\`json\n${JSON.stringify(m.content, null, 2)}\n\`\`\``}
                   </ReactMarkdown>
                 </div>
               </div>

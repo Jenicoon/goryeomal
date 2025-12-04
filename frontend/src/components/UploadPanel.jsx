@@ -39,10 +39,8 @@ export default function UploadPanel({
           <div className="chat-window small">
             {viewMessages().map(m => (
               <div key={m.id} className={`msg ${m.role === "user" ? "user" : "assistant"}`}>
-                <div className="bubble">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {m.content}
-                  </ReactMarkdown>
+                <div className="bubble" style={{ whiteSpace: "pre-wrap" }}>
+                  {typeof m.content === "string" ? m.content : (function(){ try { return JSON.stringify(m.content, null, 2); } catch { return String(m.content); } })()}
                 </div>
               </div>
             ))}

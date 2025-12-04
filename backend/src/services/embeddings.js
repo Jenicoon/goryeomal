@@ -38,8 +38,9 @@ export async function saveEmbeddingHandler(text, id, metadata, sessionId = "defa
       userId,
       sessionId,
       text,
-      vector: JSON.stringify(vector),               // 직렬화
-      metadata: metadata ? JSON.stringify(metadata) : null
+      // Prisma Bytes field: store as UTF-8 JSON in bytes
+      vector: Buffer.from(JSON.stringify(vector), "utf-8"),
+      // metadata column no longer exists in schema; omit
     }
   });
   return { id: row.id, message: "saved" };
@@ -49,13 +50,12 @@ export async function listHandler(userId, sessionId) {
   const items = await prisma.embedding.findMany({
     where: { userId, sessionId },
     orderBy: { createdAt: "desc" },
-    select: { id: true, text: true, metadata: true, createdAt: true, vector: true }
+    select: { id: true, text: true, createdAt: true, vector: true }
   });
   // 역직렬화
   const mapped = items.map(it => ({
     ...it,
-    vector: it.vector ? JSON.parse(it.vector) : [],
-    metadata: it.metadata ? JSON.parse(it.metadata) : null
+    vector: it.vector ? JSON.parse(Buffer.from(it.vector).toString("utf-8")) : []
   }));
   return { count: mapped.length, items: mapped };
 }
@@ -65,8 +65,8 @@ export async function searchHandler(query, topK = 5) {
   const items = await prisma.embedding.findMany();
   const results = items
     .map(it => {
-      const vec = it.vector ? JSON.parse(it.vector) : [];
-      return { id: it.id, text: it.text, metadata: it.metadata ? JSON.parse(it.metadata) : null, score: cosine(qVec, vec) };
+      const vec = it.vector ? JSON.parse(Buffer.from(it.vector).toString("utf-8")) : [];
+      return { id: it.id, text: it.text, score: vec.length ? cosine(qVec, vec) : 0 };
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, topK);
@@ -89,24 +89,30 @@ export async function saveEmbedding({ userId, sessionId, text, vector }) {
 }
 
 // 사용자/세션 범위의 검색(유사도 계산은 DB/벡터DB에 따라 구현)
-export async function searchEmbeddings({ userId, sessionId, query }) {
+export async function searchEmbeddings({ userId, sessionId, query, topK = 50 }) {
   if (!userId) throw new Error("userId required");
   if (!query) throw new Error("query required");
   const where = { userId, ...(sessionId ? { sessionId } : {}) };
   const rows = await prisma.embedding.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    take: 50,
-    select: { id: true, text: true }
+    take: topK,
+    select: { id: true, text: true, vector: true, createdAt: true }
   });
-  const q = query.toLowerCase();
-  return rows
-    .map(r => ({
-      id: r.id,
-      text: r.text,
-      score: r.text.toLowerCase().includes(q) ? 0.9 : 0.1
-    }))
+
+  // Query embedding
+  const qVec = await createEmbedding(query);
+
+  // Compute cosine similarity against stored vectors
+  const results = rows
+    .map(r => {
+      const vec = r.vector ? JSON.parse(Buffer.from(r.vector).toString("utf-8")) : [];
+      const score = vec.length ? cosine(qVec, vec) : 0;
+      return { id: r.id, text: r.text, score, createdAt: r.createdAt };
+    })
     .sort((a, b) => b.score - a.score);
+
+  return results;
 }
 
 export async function listAllEmbeddings({ userId, sessionId }) {
@@ -123,4 +129,26 @@ export async function deleteEmbeddingById({ id, userId }) {
   if (!row) throw new Error("not found");
   await prisma.embedding.delete({ where: { id } });
   return { ok: true };
+}
+
+// Backfill vectors for rows that are missing or empty
+export async function reindexEmbeddings({ userId, sessionId }) {
+  if (!userId) throw new Error("userId required");
+  const where = { userId, ...(sessionId ? { sessionId } : {}) };
+  const rows = await prisma.embedding.findMany({
+    where,
+    orderBy: { createdAt: "asc" },
+    select: { id: true, text: true, vector: true }
+  });
+  let updated = 0;
+  for (const r of rows) {
+    let vecArr = [];
+    try { vecArr = r.vector ? JSON.parse(Buffer.from(r.vector).toString("utf-8")) : []; } catch { vecArr = []; }
+    if (!Array.isArray(vecArr) || vecArr.length === 0) {
+      const v = await createEmbedding(r.text || "");
+      await prisma.embedding.update({ where: { id: r.id }, data: { vector: Buffer.from(JSON.stringify(v), "utf-8") } });
+      updated += 1;
+    }
+  }
+  return { ok: true, updated };
 }
