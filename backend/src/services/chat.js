@@ -1,6 +1,5 @@
 import fetch from "node-fetch";
-import pkg from "@prisma/client";
-const { PrismaClient } = pkg;
+import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 export async function createSession(userId, title = "새 대화") {
